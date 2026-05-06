@@ -45,7 +45,7 @@ type StaticMemoryItem = Omit<MemoryItem, 'imageUrl'> & {
 const storageKey = 'fubon-remember-state'
 
 const navItems: NavItem[] = [
-  { id: 'upload', label: '上傳', meta: '照片與 Markdown 說明', icon: '↑' },
+  { id: 'upload', label: '上傳', meta: '照片', icon: '↑' },
   { id: 'gallery', label: '展示照片', meta: '便利貼照片牆', icon: '▧' },
 ]
 
@@ -433,9 +433,6 @@ function resetStoredMemories() {
       <section class="workspace__intro" aria-labelledby="page-title">
         <p class="eyebrow">{{ activeNavItem.meta }}</p>
         <h1 id="page-title">{{ activeNavItem.label }}</h1>
-        <p>
-          每張照片都會對應一份獨立 Markdown 說明檔，照片與說明路徑可一併整理後上傳到 GitHub。
-        </p>
       </section>
 
       <section v-if="activePage === 'upload'" class="upload-page" aria-label="上傳照片">
@@ -450,7 +447,6 @@ function resetStoredMemories() {
             <div v-else class="upload-dropzone__placeholder">
               <span class="upload-dropzone__icon" aria-hidden="true">↑</span>
               <h2>選擇一張照片</h2>
-              <p>照片檔案會和右側產生的 Markdown 說明檔建立一對一關係。</p>
             </div>
             <label class="file-button" for="photo-upload">選擇照片</label>
             <input id="photo-upload" type="file" accept="image/*" @change="handlePhotoChange" />
@@ -469,7 +465,7 @@ function resetStoredMemories() {
               情境說明
               <textarea v-model="situation" rows="7" aria-label="照片情境說明"></textarea>
             </label>
-            <button class="primary-button" type="submit">建立 Markdown 並加入展示</button>
+            <button class="primary-button" type="submit">建立 圖片 並加入展示</button>
           </form>
         </div>
 
@@ -490,7 +486,6 @@ function resetStoredMemories() {
         <div class="gallery-toolbar">
           <div>
             <span class="section-label">便利貼展示牆</span>
-            <h2>照片與 Markdown 說明一一對應</h2>
           </div>
           <button class="primary-button" type="button" @click="activePage = 'upload'">
             新增照片
