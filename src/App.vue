@@ -34,6 +34,7 @@ type StoredState = {
   sidebarHue: number
   sidebarBrightness: number
   localMemoryItems: MemoryItem[]
+  hiddenStaticIds: number[]
   topZIndex: number
 }
 
@@ -91,6 +92,7 @@ const selectedPhotoName = ref('memory-photo.jpg')
 const selectedPhotoPreview = ref('')
 const staticMemoryItems = ref<MemoryItem[]>(toMemoryItems(sampleItems))
 const localMemoryItems = ref<MemoryItem[]>([])
+const hiddenStaticIds = ref<number[]>([])
 const stickyBoardRef = ref<HTMLElement | null>(null)
 const topZIndex = ref(10)
 const activeDrag = ref<{
@@ -111,6 +113,7 @@ if (storedState) {
   isCollapsed.value = storedState.isCollapsed
   sidebarHue.value = storedState.sidebarHue
   sidebarBrightness.value = storedState.sidebarBrightness
+  hiddenStaticIds.value = storedState.hiddenStaticIds ?? []
   localMemoryItems.value = storedLocalItems.map((item) => ({
     ...item,
     note: {
@@ -125,7 +128,10 @@ const activeNavItem = computed(
   () => navItems.find((item) => item.id === activePage.value) ?? navItems[0],
 )
 
-const memoryItems = computed<MemoryItem[]>(() => [...localMemoryItems.value, ...staticMemoryItems.value])
+const memoryItems = computed<MemoryItem[]>(() => [
+  ...localMemoryItems.value,
+  ...staticMemoryItems.value.filter((item) => !hiddenStaticIds.value.includes(item.id)),
+])
 
 const sidebarStyle = computed(() => ({
   '--sidebar-hue': `${sidebarHue.value}`,
@@ -149,7 +155,7 @@ ${situation.value}
 `)
 
 watch(
-  [activePage, isCollapsed, sidebarHue, sidebarBrightness, localMemoryItems, topZIndex],
+  [activePage, isCollapsed, sidebarHue, sidebarBrightness, localMemoryItems, hiddenStaticIds, topZIndex],
   () => {
     const state: StoredState = {
       activePage: activePage.value,
@@ -157,6 +163,7 @@ watch(
       sidebarHue: sidebarHue.value,
       sidebarBrightness: sidebarBrightness.value,
       localMemoryItems: localMemoryItems.value,
+      hiddenStaticIds: hiddenStaticIds.value,
       topZIndex: topZIndex.value,
     }
 
@@ -277,6 +284,14 @@ function resizeMemory(item: MemoryItem, amount: number) {
   item.note.scale = Math.min(Math.max(item.note.scale + amount, 0.7), 1.6)
 }
 
+function removeMemory(item: MemoryItem) {
+  localMemoryItems.value = localMemoryItems.value.filter((memory) => memory.id !== item.id)
+
+  if (staticMemoryItems.value.some((memory) => memory.id === item.id)) {
+    hiddenStaticIds.value = [...new Set([...hiddenStaticIds.value, item.id])]
+  }
+}
+
 function startDrag(event: PointerEvent, item: MemoryItem) {
   const board = stickyBoardRef.value
   const target = event.currentTarget as HTMLElement
@@ -333,6 +348,7 @@ function stopDrag() {
 function resetStoredMemories() {
   localStorage.removeItem(storageKey)
   localMemoryItems.value = []
+  hiddenStaticIds.value = []
   staticMemoryItems.value = toMemoryItems(sampleItems)
   topZIndex.value = 10
 }
@@ -526,6 +542,15 @@ function resetStoredMemories() {
                   @click.stop="resizeMemory(item, 0.1)"
                 >
                   +
+                </button>
+                <button
+                  type="button"
+                  aria-label="移除便利貼"
+                  title="移除"
+                  @pointerdown.stop
+                  @click.stop="removeMemory(item)"
+                >
+                  ×
                 </button>
               </div>
               <strong>{{ item.title }}</strong>

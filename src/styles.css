@@ -499,12 +499,12 @@ h2 {
   top: 0;
   right: 0;
   display: flex;
-  gap: 6px;
+  gap: 4px;
 }
 
 .sticky-memory__tools button {
   display: inline-grid;
-  width: 24px;
+  width: 23px;
   height: 24px;
   place-items: center;
   border: 1px solid rgb(23 32 51 / 0.16);
