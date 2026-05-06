@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-labelledby="title desc">
+  <title id="title">家庭晚餐</title>
+  <desc id="desc">暖色餐桌與家庭回憶的示意照片</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#275e7a"/>
+      <stop offset="0.52" stop-color="#f2c17d"/>
+      <stop offset="1" stop-color="#f7efe2"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#bg)"/>
+  <circle cx="270" cy="245" r="130" fill="#fff5dc" opacity="0.72"/>
+  <circle cx="930" cy="230" r="150" fill="#ffffff" opacity="0.34"/>
+  <rect x="150" y="520" width="900" height="170" rx="46" fill="#7b3f26" opacity="0.75"/>
+  <circle cx="405" cy="600" r="64" fill="#fff9ed"/>
+  <circle cx="605" cy="600" r="64" fill="#fff9ed"/>
+  <circle cx="805" cy="600" r="64" fill="#fff9ed"/>
+  <text x="88" y="815" fill="#ffffff" font-family="Arial, sans-serif" font-size="76" font-weight="700">家庭晚餐</text>
+</svg>

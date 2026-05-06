@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-labelledby="title desc">
+  <title id="title">海邊散步</title>
+  <desc id="desc">海岸、天空與散步回憶的示意照片</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#15607a"/>
+      <stop offset="0.5" stop-color="#72b7c8"/>
+      <stop offset="1" stop-color="#f8df9d"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#sky)"/>
+  <circle cx="950" cy="190" r="92" fill="#fff2c4" opacity="0.86"/>
+  <path d="M0 585 C170 520 330 650 510 585 C720 505 880 650 1200 560 L1200 900 L0 900 Z" fill="#1e7490" opacity="0.72"/>
+  <path d="M0 690 C210 620 420 770 660 690 C850 630 1020 720 1200 660 L1200 900 L0 900 Z" fill="#f4d18a" opacity="0.86"/>
+  <text x="88" y="815" fill="#ffffff" font-family="Arial, sans-serif" font-size="76" font-weight="700">海邊散步</text>
+</svg>

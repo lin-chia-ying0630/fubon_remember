@@ -1,0 +1,53 @@
+[
+  {
+    "id": 1,
+    "title": "家庭晚餐",
+    "photoName": "family-dinner.svg",
+    "markdownName": "family-dinner.md",
+    "photoUrl": "photos/family-dinner.svg",
+    "githubPath": "memories/2026/family-dinner.md",
+    "situation": "大家一起整理老照片時想起這天的晚餐，適合標記為家庭聚會與重要回憶。",
+    "note": {
+      "x": 42,
+      "y": 38,
+      "rotate": "-4deg",
+      "color": "#fff3b8",
+      "zIndex": 1,
+      "scale": 1
+    }
+  },
+  {
+    "id": 2,
+    "title": "海邊散步",
+    "photoName": "coast-walk.svg",
+    "markdownName": "coast-walk.md",
+    "photoUrl": "photos/coast-walk.svg",
+    "githubPath": "memories/2026/coast-walk.md",
+    "situation": "午後在宜蘭海邊散步，照片裡的光線偏暖，說明可記錄天氣、同行者與當時心情。",
+    "note": {
+      "x": 430,
+      "y": 120,
+      "rotate": "5deg",
+      "color": "#c9f0ff",
+      "zIndex": 2,
+      "scale": 1
+    }
+  },
+  {
+    "id": 3,
+    "title": "生日合照",
+    "photoName": "birthday-group.svg",
+    "markdownName": "birthday-group.md",
+    "photoUrl": "photos/birthday-group.svg",
+    "githubPath": "memories/2026/birthday-group.md",
+    "situation": "生日合照需要補上主角、地點與祝福內容，方便之後從 GitHub 追蹤每張照片的文字版本。",
+    "note": {
+      "x": 210,
+      "y": 380,
+      "rotate": "3deg",
+      "color": "#ffd9e6",
+      "zIndex": 3,
+      "scale": 1
+    }
+  }
+]

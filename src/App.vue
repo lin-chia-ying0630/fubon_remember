@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
 type PageKey = 'upload' | 'gallery'
 
@@ -33,8 +33,12 @@ type StoredState = {
   isCollapsed: boolean
   sidebarHue: number
   sidebarBrightness: number
-  memoryItems: MemoryItem[]
+  localMemoryItems: MemoryItem[]
   topZIndex: number
+}
+
+type StaticMemoryItem = Omit<MemoryItem, 'imageUrl'> & {
+  photoUrl: string
 }
 
 const storageKey = 'fubon-remember-state'
@@ -44,15 +48,14 @@ const navItems: NavItem[] = [
   { id: 'gallery', label: '展示照片', meta: '便利貼照片牆', icon: '▧' },
 ]
 
-const sampleItems: MemoryItem[] = [
+const sampleItems: StaticMemoryItem[] = [
   {
     id: 1,
     title: '家庭晚餐',
     photoName: 'family-dinner.jpg',
     markdownName: 'family-dinner.md',
     situation: '大家一起整理老照片時想起這天的晚餐，適合標記為家庭聚會與重要回憶。',
-    imageUrl:
-      'linear-gradient(135deg, #275e7a 0%, #f2c17d 52%, #f7efe2 100%)',
+    photoUrl: 'photos/family-dinner.svg',
     githubPath: 'memories/2026/family-dinner.md',
     note: { x: 42, y: 38, rotate: '-4deg', color: '#fff3b8', zIndex: 1, scale: 1 },
   },
@@ -62,8 +65,7 @@ const sampleItems: MemoryItem[] = [
     photoName: 'coast-walk.jpg',
     markdownName: 'coast-walk.md',
     situation: '午後在宜蘭海邊散步，照片裡的光線偏暖，說明可記錄天氣、同行者與當時心情。',
-    imageUrl:
-      'linear-gradient(135deg, #15607a 0%, #72b7c8 45%, #f8df9d 100%)',
+    photoUrl: 'photos/coast-walk.svg',
     githubPath: 'memories/2026/coast-walk.md',
     note: { x: 430, y: 120, rotate: '5deg', color: '#c9f0ff', zIndex: 2, scale: 1 },
   },
@@ -73,8 +75,7 @@ const sampleItems: MemoryItem[] = [
     photoName: 'birthday-group.png',
     markdownName: 'birthday-group.md',
     situation: '生日合照需要補上主角、地點與祝福內容，方便之後從 GitHub 追蹤每張照片的文字版本。',
-    imageUrl:
-      'linear-gradient(135deg, #40376b 0%, #d86f8d 48%, #f9d7a1 100%)',
+    photoUrl: 'photos/birthday-group.svg',
     githubPath: 'memories/2026/birthday-group.md',
     note: { x: 210, y: 380, rotate: '3deg', color: '#ffd9e6', zIndex: 3, scale: 1 },
   },
@@ -88,7 +89,8 @@ const title = ref('新照片回憶')
 const situation = ref('請描述這張照片的時間、地點、人物、事件與值得記住的情境。')
 const selectedPhotoName = ref('memory-photo.jpg')
 const selectedPhotoPreview = ref('')
-const memoryItems = ref<MemoryItem[]>(sampleItems)
+const staticMemoryItems = ref<MemoryItem[]>(toMemoryItems(sampleItems))
+const localMemoryItems = ref<MemoryItem[]>([])
 const stickyBoardRef = ref<HTMLElement | null>(null)
 const topZIndex = ref(10)
 const activeDrag = ref<{
@@ -100,11 +102,16 @@ const activeDrag = ref<{
 const storedState = loadStoredState()
 
 if (storedState) {
+  const storedLocalItems =
+    storedState.localMemoryItems ??
+    (storedState as StoredState & { memoryItems?: MemoryItem[] }).memoryItems ??
+    []
+
   activePage.value = storedState.activePage
   isCollapsed.value = storedState.isCollapsed
   sidebarHue.value = storedState.sidebarHue
   sidebarBrightness.value = storedState.sidebarBrightness
-  memoryItems.value = storedState.memoryItems.map((item) => ({
+  localMemoryItems.value = storedLocalItems.map((item) => ({
     ...item,
     note: {
       ...item.note,
@@ -117,6 +124,8 @@ if (storedState) {
 const activeNavItem = computed(
   () => navItems.find((item) => item.id === activePage.value) ?? navItems[0],
 )
+
+const memoryItems = computed<MemoryItem[]>(() => [...localMemoryItems.value, ...staticMemoryItems.value])
 
 const sidebarStyle = computed(() => ({
   '--sidebar-hue': `${sidebarHue.value}`,
@@ -140,14 +149,14 @@ ${situation.value}
 `)
 
 watch(
-  [activePage, isCollapsed, sidebarHue, sidebarBrightness, memoryItems, topZIndex],
+  [activePage, isCollapsed, sidebarHue, sidebarBrightness, localMemoryItems, topZIndex],
   () => {
     const state: StoredState = {
       activePage: activePage.value,
       isCollapsed: isCollapsed.value,
       sidebarHue: sidebarHue.value,
       sidebarBrightness: sidebarBrightness.value,
-      memoryItems: memoryItems.value,
+      localMemoryItems: localMemoryItems.value,
       topZIndex: topZIndex.value,
     }
 
@@ -155,6 +164,10 @@ watch(
   },
   { deep: true },
 )
+
+onMounted(() => {
+  void loadStaticMemories()
+})
 
 function loadStoredState(): StoredState | null {
   const rawState = localStorage.getItem(storageKey)
@@ -166,6 +179,39 @@ function loadStoredState(): StoredState | null {
   } catch {
     return null
   }
+}
+
+async function loadStaticMemories() {
+  try {
+    const response = await fetch(assetUrl('memories/index.json'))
+
+    if (!response.ok) return
+
+    staticMemoryItems.value = toMemoryItems((await response.json()) as StaticMemoryItem[])
+  } catch {
+    staticMemoryItems.value = toMemoryItems(sampleItems)
+  }
+}
+
+function toMemoryItems(items: StaticMemoryItem[]): MemoryItem[] {
+  return items.map((item) => ({
+    ...item,
+    imageUrl: assetUrl(item.photoUrl),
+  }))
+}
+
+function assetUrl(path: string) {
+  if (/^(https?:|data:)/.test(path)) return path
+
+  return `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`
+}
+
+function photoStyle(item: MemoryItem) {
+  if (/^(data:|https?:)/.test(item.imageUrl) || /\.(avif|gif|jpe?g|png|svg|webp)$/i.test(item.imageUrl)) {
+    return { backgroundImage: `url(${item.imageUrl})` }
+  }
+
+  return { background: item.imageUrl }
 }
 
 function handlePhotoChange(event: Event) {
@@ -192,7 +238,7 @@ function saveMemory() {
     { x: 48, y: 520, rotate: '-5deg', color: '#d9e7ff', zIndex: topZIndex.value + 1, scale: 1 },
   ][memoryItems.value.length % 3]
 
-  memoryItems.value = [
+  localMemoryItems.value = [
     {
       id,
       title: title.value,
@@ -205,7 +251,7 @@ function saveMemory() {
       githubPath: `memories/2026/${markdownFileName.value}`,
       note: placement,
     },
-    ...memoryItems.value,
+    ...localMemoryItems.value,
   ]
   activePage.value = 'gallery'
 }
@@ -248,19 +294,33 @@ function startDrag(event: PointerEvent, item: MemoryItem) {
 
 function moveDrag(event: PointerEvent) {
   const drag = activeDrag.value
-  const board = stickyBoardRef.value
 
-  if (!drag || !board) return
+  if (!drag) return
 
-  const item = memoryItems.value.find((memory) => memory.id === drag.id)
+  const item =
+    localMemoryItems.value.find((memory) => memory.id === drag.id) ??
+    staticMemoryItems.value.find((memory) => memory.id === drag.id)
 
   if (!item) return
+
+  moveMemoryWithinBoard(event, item, drag.offsetX, drag.offsetY)
+}
+
+function moveMemoryWithinBoard(
+  event: PointerEvent,
+  item: Pick<MemoryItem, 'note'>,
+  offsetX: number,
+  offsetY: number,
+) {
+  const board = stickyBoardRef.value
+
+  if (!board) return
 
   const boardRect = board.getBoundingClientRect()
   const cardWidth = 330 * item.note.scale
   const cardHeight = 168 * item.note.scale
-  const nextX = event.clientX - drag.offsetX
-  const nextY = event.clientY - drag.offsetY
+  const nextX = event.clientX - offsetX
+  const nextY = event.clientY - offsetY
 
   item.note.x = Math.min(Math.max(nextX, 8), boardRect.width - cardWidth)
   item.note.y = Math.min(Math.max(nextY, 8), boardRect.height - cardHeight)
@@ -272,7 +332,8 @@ function stopDrag() {
 
 function resetStoredMemories() {
   localStorage.removeItem(storageKey)
-  memoryItems.value = sampleItems
+  localMemoryItems.value = []
+  staticMemoryItems.value = toMemoryItems(sampleItems)
   topZIndex.value = 10
 }
 </script>
@@ -444,11 +505,7 @@ function resetStoredMemories() {
           >
             <div
               class="sticky-memory__photo"
-              :style="
-                item.imageUrl.startsWith('data:')
-                  ? { backgroundImage: `url(${item.imageUrl})` }
-                  : { background: item.imageUrl }
-              "
+              :style="photoStyle(item)"
             ></div>
             <div class="sticky-memory__note">
               <div class="sticky-memory__tools" aria-label="便利貼尺寸控制">
