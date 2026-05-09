@@ -490,6 +490,10 @@ h2 {
   gap: 6px;
 }
 
+.sticky-memory__note:has(.sticky-memory__tools) {
+  padding-top: 28px;
+}
+
 .sticky-memory__tools {
   position: absolute;
   top: 0;

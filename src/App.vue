@@ -261,6 +261,18 @@ function downloadMarkdown() {
   URL.revokeObjectURL(url)
 }
 
+function resizeDraftMemory(item: MemoryItem, amount: number) {
+  if (!item.isDraft) return
+
+  item.note.scale = Math.min(Math.max(item.note.scale + amount, 0.7), 1.6)
+}
+
+function removeDraftMemory(item: MemoryItem) {
+  if (!item.isDraft) return
+
+  draftMemoryItems.value = draftMemoryItems.value.filter((memory) => memory.id !== item.id)
+}
+
 function showGitPublishHelp() {
   prepareGitPublish()
 }
@@ -438,6 +450,32 @@ function shellQuote(value: string) {
               :style="photoStyle(item)"
             ></div>
             <div class="sticky-memory__note">
+              <div v-if="item.isDraft" class="sticky-memory__tools" aria-label="草稿便利貼控制">
+                <button
+                  type="button"
+                  aria-label="縮小便利貼"
+                  title="縮小"
+                  @click="resizeDraftMemory(item, -0.1)"
+                >
+                  -
+                </button>
+                <button
+                  type="button"
+                  aria-label="放大便利貼"
+                  title="放大"
+                  @click="resizeDraftMemory(item, 0.1)"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  aria-label="刪除便利貼"
+                  title="刪除"
+                  @click="removeDraftMemory(item)"
+                >
+                  ×
+                </button>
+              </div>
               <small v-if="item.isDraft" class="sticky-memory__status">尚未存入 Git</small>
               <strong>{{ item.title }}</strong>
               <p>{{ item.situation }}</p>
