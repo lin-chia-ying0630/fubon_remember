@@ -5,7 +5,21 @@
 
 這個專案的展示頁會讀取 `public/memories/index.json`，再依照裡面的對應關係顯示照片與 Markdown 說明。
 
-新增一張要永久展示的照片時：
+新增一張要讓所有人都看到的照片時，建議使用發布工具：
+
+```bash
+npm run publish:memory -- --photo ./family.jpg --title "家庭聚餐" --situation "大家一起吃飯的回憶"
+npm run build
+git add public
+git commit -m "Add family memory"
+git push origin main
+```
+
+GitHub Actions 會自動 build 並部署到 GitHub Pages。
+
+網頁上的「加入本機預覽」只會存在目前這台手機或電腦中，適合先試排版；要讓大家看到一樣的內容，必須把照片提交到 GitHub。
+
+手動新增一張要永久展示的照片時：
 
 1. 將照片放到 `public/photos/`
 2. 將情境說明 Markdown 放到 `public/memories/2026/`

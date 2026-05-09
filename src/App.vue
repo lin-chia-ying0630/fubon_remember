@@ -621,15 +621,15 @@ async function clearImageData() {
               情境說明
               <textarea v-model="situation" rows="7" aria-label="照片情境說明"></textarea>
             </label>
-            <button class="primary-button" type="submit">建立 圖片 並加入展示</button>
+            <button class="primary-button" type="submit">加入本機預覽</button>
           </form>
         </div>
 
         <div class="github-panel" aria-label="GitHub 上傳資訊">
           <div>
-            <span class="section-label">GitHub-ready mapping</span>
+            <span class="section-label">GitHub 共同發布</span>
             <h2>{{ selectedPhotoName }} ↔ {{ markdownFileName }}</h2>
-            <p>建議路徑：photos/{{ selectedPhotoName }} 與 memories/2026/{{ markdownFileName }}</p>
+            <p>要讓大家看到同一份，請把照片發布到 GitHub：public/photos 與 public/memories/2026。</p>
             <button class="secondary-button" type="button" @click="downloadMarkdown">
               下載 Markdown
             </button>
