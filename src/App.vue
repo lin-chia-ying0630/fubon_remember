@@ -17,6 +17,7 @@ type MemoryItem = {
   markdownName: string
   situation: string
   imageUrl: string
+  imageDataKey?: string
   githubPath: string
   note: {
     x: number
@@ -43,6 +44,9 @@ type StaticMemoryItem = Omit<MemoryItem, 'imageUrl'> & {
 }
 
 const storageKey = 'fubon-remember-state'
+const imageDbName = 'fubon-remember-images'
+const imageStoreName = 'photos'
+const imageFallback = 'linear-gradient(135deg, #2f5d7c 0%, #9bc4dd 46%, #f5ddb0 100%)'
 
 const navItems: NavItem[] = [
   { id: 'upload', label: '上傳', meta: '照片', icon: '↑' },
@@ -162,18 +166,19 @@ watch(
       isCollapsed: isCollapsed.value,
       sidebarHue: sidebarHue.value,
       sidebarBrightness: sidebarBrightness.value,
-      localMemoryItems: localMemoryItems.value,
+      localMemoryItems: serializeLocalMemoryItems(false),
       hiddenStaticIds: hiddenStaticIds.value,
       topZIndex: topZIndex.value,
     }
 
-    localStorage.setItem(storageKey, JSON.stringify(state))
+    saveStoredState(state)
   },
   { deep: true },
 )
 
 onMounted(() => {
   void loadStaticMemories()
+  void restoreStoredLocalImages()
 })
 
 function loadStoredState(): StoredState | null {
@@ -237,13 +242,18 @@ function handlePhotoChange(event: Event) {
   reader.readAsDataURL(file)
 }
 
-function saveMemory() {
+async function saveMemory() {
   const id = Date.now()
+  const imageDataKey = selectedPhotoPreview.value ? `photo-${id}` : undefined
   const placement = [
     { x: 360, y: 36, rotate: '-2deg', color: '#e3ffd1', zIndex: topZIndex.value + 1, scale: 1 },
     { x: 580, y: 330, rotate: '4deg', color: '#fff0c4', zIndex: topZIndex.value + 1, scale: 1 },
     { x: 48, y: 520, rotate: '-5deg', color: '#d9e7ff', zIndex: topZIndex.value + 1, scale: 1 },
   ][memoryItems.value.length % 3]
+
+  if (imageDataKey) {
+    await saveImageData(imageDataKey, selectedPhotoPreview.value)
+  }
 
   localMemoryItems.value = [
     {
@@ -252,9 +262,8 @@ function saveMemory() {
       photoName: selectedPhotoName.value,
       markdownName: markdownFileName.value,
       situation: situation.value,
-      imageUrl:
-        selectedPhotoPreview.value ||
-        'linear-gradient(135deg, #2f5d7c 0%, #9bc4dd 46%, #f5ddb0 100%)',
+      imageUrl: selectedPhotoPreview.value || imageFallback,
+      imageDataKey,
       githubPath: `memories/2026/${markdownFileName.value}`,
       note: placement,
     },
@@ -286,6 +295,10 @@ function resizeMemory(item: MemoryItem, amount: number) {
 
 function removeMemory(item: MemoryItem) {
   localMemoryItems.value = localMemoryItems.value.filter((memory) => memory.id !== item.id)
+
+  if (item.imageDataKey) {
+    void deleteImageData(item.imageDataKey)
+  }
 
   if (staticMemoryItems.value.some((memory) => memory.id === item.id)) {
     hiddenStaticIds.value = [...new Set([...hiddenStaticIds.value, item.id])]
@@ -346,11 +359,154 @@ function stopDrag() {
 }
 
 function resetStoredMemories() {
+  void clearImageData()
   localStorage.removeItem(storageKey)
   localMemoryItems.value = []
   hiddenStaticIds.value = []
   staticMemoryItems.value = toMemoryItems(sampleItems)
   topZIndex.value = 10
+}
+
+function serializeLocalMemoryItems(stripAllDataUrls: boolean) {
+  return localMemoryItems.value.map((item) => {
+    if (!isDataUrl(item.imageUrl)) return item
+
+    if (stripAllDataUrls || item.imageDataKey) {
+      return {
+        ...item,
+        imageUrl: '',
+      }
+    }
+
+    return item
+  })
+}
+
+function saveStoredState(state: StoredState) {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(state))
+  } catch {
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        ...state,
+        localMemoryItems: serializeLocalMemoryItems(true),
+      }),
+    )
+  }
+}
+
+async function restoreStoredLocalImages() {
+  let hasUpdates = false
+
+  const restoredItems = await Promise.all(
+    localMemoryItems.value.map(async (item) => {
+      if (item.imageDataKey) {
+        const storedImage = await loadImageData(item.imageDataKey)
+
+        if (storedImage) {
+          return {
+            ...item,
+            imageUrl: storedImage,
+          }
+        }
+
+        if (!item.imageUrl) {
+          return {
+            ...item,
+            imageUrl: imageFallback,
+          }
+        }
+
+        return item
+      }
+
+      if (!isDataUrl(item.imageUrl)) return item
+
+      const imageDataKey = `photo-${item.id}`
+      await saveImageData(imageDataKey, item.imageUrl)
+      hasUpdates = true
+
+      return {
+        ...item,
+        imageDataKey,
+      }
+    }),
+  )
+
+  if (hasUpdates || restoredItems.some((item, index) => item.imageUrl !== localMemoryItems.value[index]?.imageUrl)) {
+    localMemoryItems.value = restoredItems
+  }
+}
+
+function isDataUrl(value: string) {
+  return value.startsWith('data:')
+}
+
+function openImageDb() {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(imageDbName, 1)
+
+    request.addEventListener('upgradeneeded', () => {
+      request.result.createObjectStore(imageStoreName)
+    })
+    request.addEventListener('success', () => resolve(request.result))
+    request.addEventListener('error', () => reject(request.error))
+  })
+}
+
+async function withImageStore<T>(
+  mode: IDBTransactionMode,
+  action: (store: IDBObjectStore) => IDBRequest<T>,
+) {
+  const db = await openImageDb()
+
+  return new Promise<T>((resolve, reject) => {
+    const transaction = db.transaction(imageStoreName, mode)
+    const request = action(transaction.objectStore(imageStoreName))
+
+    request.addEventListener('success', () => resolve(request.result))
+    request.addEventListener('error', () => reject(request.error))
+    transaction.addEventListener('complete', () => db.close())
+    transaction.addEventListener('error', () => {
+      db.close()
+      reject(transaction.error)
+    })
+  })
+}
+
+async function saveImageData(key: string, imageData: string) {
+  try {
+    await withImageStore('readwrite', (store) => store.put(imageData, key))
+  } catch {
+    // The gallery still works in the current session if browser storage is unavailable.
+  }
+}
+
+async function loadImageData(key: string) {
+  try {
+    const imageData = await withImageStore<string | undefined>('readonly', (store) => store.get(key))
+
+    return typeof imageData === 'string' ? imageData : ''
+  } catch {
+    return ''
+  }
+}
+
+async function deleteImageData(key: string) {
+  try {
+    await withImageStore('readwrite', (store) => store.delete(key))
+  } catch {
+    // Best-effort cleanup only.
+  }
+}
+
+async function clearImageData() {
+  try {
+    await withImageStore('readwrite', (store) => store.clear())
+  } catch {
+    // Best-effort cleanup only.
+  }
 }
 </script>
 
