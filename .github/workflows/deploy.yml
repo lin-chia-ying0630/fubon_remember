@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -48,27 +48,35 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - name: Clean old artifacts
-        run: |
-          # Get all artifacts named "github-pages"
-          ARTIFACTS=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --jq '.artifacts[] | select(.name=="github-pages") | .id' || true)
-          
-          # Count artifacts
-          ARTIFACT_COUNT=$(echo "$ARTIFACTS" | grep -c . || echo 0)
-          
-          if [ "$ARTIFACT_COUNT" -gt 1 ]; then
-            echo "Found $ARTIFACT_COUNT github-pages artifacts, keeping only the latest..."
-            # Keep the last artifact, delete others
-            ARTIFACT_ARRAY=($ARTIFACTS)
-            for i in "${!ARTIFACT_ARRAY[@]}"; do
-              if [ $i -lt $((${#ARTIFACT_ARRAY[@]} - 1)) ]; then
-                echo "Deleting artifact ${ARTIFACT_ARRAY[$i]}"
-                gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/${ARTIFACT_ARRAY[$i]} || true
-              fi
-            done
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Clean old artifacts from this run
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Get all artifacts from this specific workflow run
+            const artifacts = await github.rest.actions.listArtifactsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            // Filter for github-pages artifacts from this run only
+            const gpArtifacts = artifacts.data.artifacts.filter(
+              a => a.name === 'github-pages' && a.workflow_run.id === context.runId
+            );
+
+            console.log(`Found ${gpArtifacts.length} github-pages artifacts in this run`);
+
+            // Keep only the most recent one (they're sorted by newest first)
+            if (gpArtifacts.length > 1) {
+              const toDelete = gpArtifacts.slice(1);
+              for (const artifact of toDelete) {
+                console.log(`Deleting artifact: ${artifact.id}`);
+                await github.rest.actions.deleteArtifact({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  artifact_id: artifact.id,
+                });
+              }
+            }
         continue-on-error: true
 
       - name: Deploy
