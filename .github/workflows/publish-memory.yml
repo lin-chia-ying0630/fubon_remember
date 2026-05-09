@@ -1,0 +1,81 @@
+name: Publish Memory
+
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: 照片標題
+        required: true
+        type: string
+      situation:
+        description: 情境說明
+        required: true
+        type: string
+      photo_name:
+        description: 照片檔名，例如 family.jpg
+        required: true
+        type: string
+      photo_base64:
+        description: 照片 base64，可含 data:image/...;base64, 前綴
+        required: true
+        type: string
+      year:
+        description: 年份
+        required: false
+        default: "2026"
+        type: string
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Publish memory files
+        env:
+          PUBLISH_PHOTO_BASE64: ${{ inputs.photo_base64 }}
+          PUBLISH_PHOTO_NAME: ${{ inputs.photo_name }}
+          PUBLISH_TITLE: ${{ inputs.title }}
+          PUBLISH_SITUATION: ${{ inputs.situation }}
+          PUBLISH_YEAR: ${{ inputs.year }}
+        run: npm run publish:memory
+
+      - name: Commit memory
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/photos public/memories
+          git commit -m "Add memory: ${{ inputs.title }}"
+          git push origin main
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+          retention-days: 1
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

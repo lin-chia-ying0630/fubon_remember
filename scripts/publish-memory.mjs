@@ -18,28 +18,39 @@ const notePlacements = [
 ]
 
 const options = parseArgs(process.argv.slice(2))
+const publishOptions = {
+  ...options,
+  photo: options.photo ?? process.env.PUBLISH_PHOTO,
+  'photo-base64': options['photo-base64'] ?? process.env.PUBLISH_PHOTO_BASE64,
+  'photo-name': options['photo-name'] ?? process.env.PUBLISH_PHOTO_NAME,
+  title: options.title ?? process.env.PUBLISH_TITLE,
+  situation: options.situation ?? process.env.PUBLISH_SITUATION,
+  year: options.year ?? process.env.PUBLISH_YEAR,
+  slug: options.slug ?? process.env.PUBLISH_SLUG,
+}
 
-if (options.help) {
+if (publishOptions.help) {
   printHelp()
   process.exit(0)
 }
 
-if (!options.photo || !options.title || (!options.situation && !options['situation-file'])) {
+if ((!publishOptions.photo && !publishOptions['photo-base64']) || !publishOptions.title || (!publishOptions.situation && !publishOptions['situation-file'])) {
   printHelp()
   process.exit(1)
 }
 
-const photoPath = path.resolve(String(options.photo))
-const photoExtension = path.extname(photoPath).toLowerCase()
+const sourcePhotoName = String(publishOptions['photo-name'] ?? publishOptions.photo ?? 'memory-photo.jpg')
+const photoPath = publishOptions.photo ? path.resolve(String(publishOptions.photo)) : ''
+const photoExtension = path.extname(sourcePhotoName).toLowerCase()
 
 if (!supportedPhotoExtensions.has(photoExtension)) {
   throw new Error(`Unsupported photo file type: ${photoExtension || '(none)'}`)
 }
 
-const title = String(options.title).trim()
-const situation = await readSituation(options)
-const year = String(options.year ?? new Date().getFullYear())
-const slugSource = options.slug ?? title ?? path.basename(photoPath, photoExtension)
+const title = String(publishOptions.title).trim()
+const situation = await readSituation(publishOptions)
+const year = String(publishOptions.year ?? new Date().getFullYear())
+const slugSource = publishOptions.slug ?? title ?? path.basename(photoPath, photoExtension)
 const slug = await uniqueSlug(slugify(String(slugSource)))
 const photoName = `${slug}${photoExtension}`
 const markdownName = `${slug}.md`
@@ -68,7 +79,13 @@ const item = {
 
 await mkdir(photosDir, { recursive: true })
 await mkdir(markdownDir, { recursive: true })
-await copyFile(photoPath, targetPhotoPath)
+
+if (publishOptions['photo-base64']) {
+  await writeFile(targetPhotoPath, Buffer.from(normalizeBase64(String(publishOptions['photo-base64'])), 'base64'))
+} else {
+  await copyFile(photoPath, targetPhotoPath)
+}
+
 await writeFile(markdownPath, markdownFor(item), 'utf8')
 await writeFile(indexPath, `${JSON.stringify([item, ...indexItems], null, 2)}\n`, 'utf8')
 
@@ -139,6 +156,10 @@ function slugify(value) {
     .replace(/^-+|-+$/g, '')
 }
 
+function normalizeBase64(value) {
+  return value.includes(',') ? value.split(',').at(-1) ?? '' : value
+}
+
 function markdownFor(item) {
   return `# ${item.title}
 
@@ -154,9 +175,12 @@ ${item.situation}
 function printHelp() {
   console.log(`Usage:
   npm run publish:memory -- --photo ./photo.jpg --title "家庭聚餐" --situation "照片說明"
+  npm run publish:memory -- --photo-base64 "/9j/..." --photo-name family.jpg --title "家庭聚餐" --situation "照片說明"
 
 Options:
   --photo            Photo file path. Required.
+  --photo-base64     Base64 photo content, with or without data URL prefix.
+  --photo-name       Original photo filename when using --photo-base64.
   --title            Memory title. Required.
   --situation        Memory description. Required unless --situation-file is used.
   --situation-file   Text file containing the description.

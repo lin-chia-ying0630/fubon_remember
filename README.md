@@ -17,9 +17,27 @@ git push origin main
 
 GitHub Actions 會自動 build 並部署到 GitHub Pages。
 
-網頁上的「加入展示」會先把照片放到目前畫面的展示牆預覽；展示畫面的「存入 GIT」可以輸入 GitHub token，透過 GitHub API 直接把照片、Markdown 與 `index.json` commit 到 repo。
+網頁上的「加入展示」會先把照片放到目前畫面的展示牆預覽；展示畫面的「存入 GIT」會產生 GitHub Actions 手動發布所需欄位。
 
-GitHub token 建議使用 fine-grained token，授權範圍只給這個 repo，Repository permissions 設定 `Contents: Read and write`。token 只會存放在目前瀏覽器 session，不會提交到 repo。
+## GitHub Actions 手動發布
+
+此專案提供 `.github/workflows/publish-memory.yml`，可以在 GitHub Actions 頁面手動新增照片，workflow 會自動：
+
+1. 將照片寫入 `public/photos/`
+2. 建立 Markdown 到 `public/memories/2026/`
+3. 更新 `public/memories/index.json`
+4. Commit 並 push 到 `main`
+5. Build 並部署 GitHub Pages
+
+使用方式：
+
+1. 到 GitHub repo 的 `Actions`
+2. 選 `Publish Memory`
+3. 按 `Run workflow`
+4. 填入 `title`、`situation`、`photo_name`、`photo_base64`
+5. 執行後等待 GitHub Pages 部署完成
+
+`photo_base64` 可以使用包含 `data:image/...;base64,` 前綴的內容，也可以只貼純 base64。
 
 手動新增一張要永久展示的照片時：
 

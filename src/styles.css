@@ -438,23 +438,6 @@ h2 {
   white-space: pre-wrap;
 }
 
-.token-field {
-  display: grid;
-  gap: 8px;
-  color: #526071;
-  font-size: 0.88rem;
-  font-weight: 720;
-}
-
-.token-field input {
-  width: 100%;
-  border: 1px solid #cfd7e4;
-  border-radius: 8px;
-  padding: 11px 12px;
-  color: #162033;
-  background: #ffffff;
-}
-
 .gallery-toolbar {
   display: flex;
   align-items: end;
