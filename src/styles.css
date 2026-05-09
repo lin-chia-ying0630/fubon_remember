@@ -352,6 +352,11 @@ h2 {
   background: #ffffff;
 }
 
+.secondary-button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
 .file-button:hover,
 .primary-button:hover {
   background: #1d4778;
@@ -431,6 +436,23 @@ h2 {
   font-size: 0.85rem;
   line-height: 1.55;
   white-space: pre-wrap;
+}
+
+.token-field {
+  display: grid;
+  gap: 8px;
+  color: #526071;
+  font-size: 0.88rem;
+  font-weight: 720;
+}
+
+.token-field input {
+  width: 100%;
+  border: 1px solid #cfd7e4;
+  border-radius: 8px;
+  padding: 11px 12px;
+  color: #162033;
+  background: #ffffff;
 }
 
 .gallery-toolbar {

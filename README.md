@@ -17,7 +17,9 @@ git push origin main
 
 GitHub Actions 會自動 build 並部署到 GitHub Pages。
 
-網頁上的「加入展示」會先把照片放到目前畫面的展示牆預覽；展示畫面的「存入 GIT」會產生發布指令提醒。真正要讓大家看到一樣的內容，必須在專案電腦執行指令並把照片提交到 GitHub。
+網頁上的「加入展示」會先把照片放到目前畫面的展示牆預覽；展示畫面的「存入 GIT」可以輸入 GitHub token，透過 GitHub API 直接把照片、Markdown 與 `index.json` commit 到 repo。
+
+GitHub token 建議使用 fine-grained token，授權範圍只給這個 repo，Repository permissions 設定 `Contents: Read and write`。token 只會存放在目前瀏覽器 session，不會提交到 repo。
 
 手動新增一張要永久展示的照片時：
 

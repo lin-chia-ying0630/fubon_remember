@@ -41,6 +41,10 @@ type StaticMemoryItem = Omit<MemoryItem, 'imageUrl'> & {
 }
 
 const storageKey = 'fubon-remember-state'
+const githubTokenKey = 'fubon-remember-github-token'
+const githubOwner = 'lin-chia-ying0630'
+const githubRepo = 'fubon_remember'
+const githubBranch = 'main'
 const imageFallback = 'linear-gradient(135deg, #2f5d7c 0%, #9bc4dd 46%, #f5ddb0 100%)'
 
 const navItems: NavItem[] = [
@@ -90,6 +94,8 @@ const situation = ref('請描述這張照片的時間、地點、人物、事件
 const selectedPhotoName = ref('memory-photo.jpg')
 const selectedPhotoPreview = ref('')
 const gitPublishMessage = ref('')
+const githubToken = ref(sessionStorage.getItem(githubTokenKey) ?? '')
+const isPublishingToGit = ref(false)
 const staticMemoryItems = ref<MemoryItem[]>(toMemoryItems(sampleItems))
 const draftMemoryItems = ref<MemoryItem[]>([])
 const stickyBoardRef = ref<HTMLElement | null>(null)
@@ -111,6 +117,7 @@ const memoryItems = computed<MemoryItem[]>(() => [
   ...draftMemoryItems.value,
   ...staticMemoryItems.value,
 ])
+const latestDraft = computed(() => draftMemoryItems.value[0] ?? null)
 
 const sidebarStyle = computed(() => ({
   '--sidebar-hue': `${sidebarHue.value}`,
@@ -239,15 +246,45 @@ function addDraftToGallery() {
   activePage.value = 'gallery'
 }
 
-function prepareGitPublish() {
-  gitPublishMessage.value = [
-    '這個網站不能直接寫入 GitHub。請在專案電腦執行：',
-    `npm run publish:memory -- --photo ./${selectedPhotoName.value} --title ${shellQuote(title.value)} --situation ${shellQuote(situation.value)}`,
-    'npm run build',
-    'git add public',
-    `git commit -m ${shellQuote(`Add ${title.value} memory`)}`,
-    'git push origin main',
-  ].join('\n')
+async function publishLatestDraftToGit() {
+  const draft = latestDraft.value
+
+  if (!draft) {
+    gitPublishMessage.value = '目前沒有尚未存入 Git 的草稿照片。'
+    return
+  }
+
+  if (!githubToken.value.trim()) {
+    gitPublishMessage.value = '請先輸入 GitHub token。需要 repo contents 讀寫權限。'
+    return
+  }
+
+  sessionStorage.setItem(githubTokenKey, githubToken.value.trim())
+  isPublishingToGit.value = true
+  gitPublishMessage.value = '正在寫入 GitHub repo...'
+
+  try {
+    const publishedItem = await commitDraftToGitHub(draft)
+
+    draftMemoryItems.value = draftMemoryItems.value.filter((item) => item.id !== draft.id)
+    staticMemoryItems.value = [
+      {
+        ...publishedItem,
+        imageUrl: assetUrl(publishedItem.photoUrl),
+      },
+      ...staticMemoryItems.value,
+    ]
+    gitPublishMessage.value = [
+      '已存入 GitHub repo。',
+      `照片：public/${publishedItem.photoUrl}`,
+      `Markdown：public/${publishedItem.githubPath}`,
+      'GitHub Pages 會自動重新部署，稍等一下大家就會看到同一份內容。',
+    ].join('\n')
+  } catch (error) {
+    gitPublishMessage.value = error instanceof Error ? error.message : '存入 GitHub 失敗。'
+  } finally {
+    isPublishingToGit.value = false
+  }
 }
 
 function downloadMarkdown() {
@@ -274,11 +311,158 @@ function removeDraftMemory(item: MemoryItem) {
 }
 
 function showGitPublishHelp() {
-  prepareGitPublish()
+  void publishLatestDraftToGit()
 }
 
-function shellQuote(value: string) {
-  return `'${value.replace(/'/g, "'\\''")}'`
+async function commitDraftToGitHub(draft: MemoryItem) {
+  const indexFile = await getGitHubFile('public/memories/index.json')
+  const indexItems = JSON.parse(decodeBase64Unicode(indexFile.content)) as StaticMemoryItem[]
+  const nextId = Math.max(0, ...indexItems.map((item) => Number(item.id) || 0)) + 1
+  const year = new Date().getFullYear()
+  const photoExtension = fileExtension(draft.photoName)
+  const baseName = uniqueBaseName(slugify(draft.title) || `memory-${nextId}`, indexItems)
+  const photoName = `${baseName}${photoExtension}`
+  const markdownName = `${baseName}.md`
+  const photoPath = `public/photos/${photoName}`
+  const markdownPath = `public/memories/${year}/${markdownName}`
+  const publishedItem: StaticMemoryItem = {
+    id: nextId,
+    title: draft.title,
+    photoName,
+    markdownName,
+    photoUrl: `photos/${photoName}`,
+    githubPath: `memories/${year}/${markdownName}`,
+    situation: draft.situation,
+    note: {
+      ...draft.note,
+      zIndex: nextId,
+    },
+  }
+
+  await putGitHubFile(photoPath, dataUrlToBase64(draft.imageUrl), `Add ${draft.title} photo`)
+  await putGitHubFile(
+    markdownPath,
+    encodeTextToBase64(markdownFor(publishedItem)),
+    `Add ${draft.title} memory markdown`,
+  )
+  await putGitHubFile(
+    'public/memories/index.json',
+    encodeTextToBase64(`${JSON.stringify([publishedItem, ...indexItems], null, 2)}\n`),
+    `Add ${draft.title} memory`,
+    indexFile.sha,
+  )
+
+  return publishedItem
+}
+
+async function getGitHubFile(path: string) {
+  const response = await githubFetch(`https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/${path}?ref=${githubBranch}`)
+  const data = await response.json() as { content?: string; sha?: string; message?: string }
+
+  if (!response.ok || !data.content || !data.sha) {
+    throw new Error(data.message ?? `無法讀取 ${path}`)
+  }
+
+  return {
+    content: data.content.replace(/\s/g, ''),
+    sha: data.sha,
+  }
+}
+
+async function putGitHubFile(path: string, content: string, message: string, sha?: string) {
+  const response = await githubFetch(`https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/${path}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      branch: githubBranch,
+      content,
+      message,
+      sha,
+    }),
+  })
+  const data = await response.json() as { message?: string }
+
+  if (!response.ok) {
+    throw new Error(data.message ?? `無法寫入 ${path}`)
+  }
+}
+
+async function githubFetch(url: string, init: RequestInit = {}) {
+  return fetch(url, {
+    ...init,
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${githubToken.value.trim()}`,
+      'Content-Type': 'application/json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...init.headers,
+    },
+  })
+}
+
+function markdownFor(item: StaticMemoryItem) {
+  return `# ${item.title}
+
+photo: ${item.photoUrl}
+markdown: ${item.githubPath}
+
+## 情境說明
+
+${item.situation}
+`
+}
+
+function fileExtension(fileName: string) {
+  const match = fileName.match(/\.[a-z0-9]+$/i)
+
+  return match?.[0].toLowerCase() ?? '.jpg'
+}
+
+function uniqueBaseName(baseName: string, items: StaticMemoryItem[]) {
+  const usedNames = new Set(items.flatMap((item) => [item.photoName.replace(/\.[^.]+$/, ''), item.markdownName.replace(/\.md$/, '')]))
+  let nextBaseName = baseName
+  let suffix = 2
+
+  while (usedNames.has(nextBaseName)) {
+    nextBaseName = `${baseName}-${suffix}`
+    suffix += 1
+  }
+
+  return nextBaseName
+}
+
+function slugify(value: string) {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function dataUrlToBase64(dataUrl: string) {
+  if (!dataUrl.startsWith('data:')) {
+    throw new Error('草稿照片不是可上傳的圖片資料，請重新選擇照片。')
+  }
+
+  return dataUrl.split(',')[1] ?? ''
+}
+
+function encodeTextToBase64(value: string) {
+  const bytes = new TextEncoder().encode(value)
+  let binary = ''
+
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte)
+  })
+
+  return btoa(binary)
+}
+
+function decodeBase64Unicode(value: string) {
+  const binary = atob(value)
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+
+  return new TextDecoder().decode(bytes)
 }
 </script>
 
@@ -418,15 +602,38 @@ function shellQuote(value: string) {
           <button class="primary-button" type="button" @click="activePage = 'upload'">
             新增照片
           </button>
-          <button class="secondary-button" type="button" @click="showGitPublishHelp">
+          <button
+            class="secondary-button"
+            type="button"
+            :disabled="isPublishingToGit"
+            @click="showGitPublishHelp"
+          >
             存入 GIT
           </button>
         </div>
 
-        <div v-if="gitPublishMessage" class="github-panel github-panel--single" aria-label="存入 Git 指令">
+        <div class="github-panel github-panel--single" aria-label="存入 Git 設定">
           <div>
-            <span class="section-label">下一步</span>
-            <h2>在專案電腦執行這些指令</h2>
+            <span class="section-label">GitHub Repo</span>
+            <h2>{{ githubOwner }}/{{ githubRepo }}</h2>
+            <p>請使用有 contents 讀寫權限的 GitHub token。</p>
+          </div>
+          <label class="token-field">
+            GitHub token
+            <input
+              v-model="githubToken"
+              type="password"
+              autocomplete="off"
+              placeholder="github_pat_..."
+              aria-label="GitHub token"
+            />
+          </label>
+        </div>
+
+        <div v-if="gitPublishMessage" class="github-panel github-panel--single" aria-label="存入 Git 狀態">
+          <div>
+            <span class="section-label">狀態</span>
+            <h2>{{ isPublishingToGit ? '寫入中' : '存入 GIT' }}</h2>
           </div>
           <pre>{{ gitPublishMessage }}</pre>
         </div>
