@@ -17,7 +17,6 @@ type MemoryItem = {
   markdownName: string
   situation: string
   imageUrl: string
-  imageDataKey?: string
   githubPath: string
   note: {
     x: number
@@ -34,9 +33,6 @@ type StoredState = {
   isCollapsed: boolean
   sidebarHue: number
   sidebarBrightness: number
-  localMemoryItems: MemoryItem[]
-  hiddenStaticIds: number[]
-  topZIndex: number
 }
 
 type StaticMemoryItem = Omit<MemoryItem, 'imageUrl'> & {
@@ -44,9 +40,6 @@ type StaticMemoryItem = Omit<MemoryItem, 'imageUrl'> & {
 }
 
 const storageKey = 'fubon-remember-state'
-const imageDbName = 'fubon-remember-images'
-const imageStoreName = 'photos'
-const imageFallback = 'linear-gradient(135deg, #2f5d7c 0%, #9bc4dd 46%, #f5ddb0 100%)'
 
 const navItems: NavItem[] = [
   { id: 'upload', label: '上傳', meta: '照片', icon: '↑' },
@@ -94,48 +87,24 @@ const title = ref('新照片回憶')
 const situation = ref('請描述這張照片的時間、地點、人物、事件與值得記住的情境。')
 const selectedPhotoName = ref('memory-photo.jpg')
 const selectedPhotoPreview = ref('')
+const gitPublishMessage = ref('')
 const staticMemoryItems = ref<MemoryItem[]>(toMemoryItems(sampleItems))
-const localMemoryItems = ref<MemoryItem[]>([])
-const hiddenStaticIds = ref<number[]>([])
 const stickyBoardRef = ref<HTMLElement | null>(null)
-const topZIndex = ref(10)
-const activeDrag = ref<{
-  id: number
-  offsetX: number
-  offsetY: number
-} | null>(null)
 
 const storedState = loadStoredState()
 
 if (storedState) {
-  const storedLocalItems =
-    storedState.localMemoryItems ??
-    (storedState as StoredState & { memoryItems?: MemoryItem[] }).memoryItems ??
-    []
-
   activePage.value = storedState.activePage
   isCollapsed.value = storedState.isCollapsed
   sidebarHue.value = storedState.sidebarHue
   sidebarBrightness.value = storedState.sidebarBrightness
-  hiddenStaticIds.value = storedState.hiddenStaticIds ?? []
-  localMemoryItems.value = storedLocalItems.map((item) => ({
-    ...item,
-    note: {
-      ...item.note,
-      scale: item.note.scale ?? 1,
-    },
-  }))
-  topZIndex.value = storedState.topZIndex
 }
 
 const activeNavItem = computed(
   () => navItems.find((item) => item.id === activePage.value) ?? navItems[0],
 )
 
-const memoryItems = computed<MemoryItem[]>(() => [
-  ...localMemoryItems.value,
-  ...staticMemoryItems.value.filter((item) => !hiddenStaticIds.value.includes(item.id)),
-])
+const memoryItems = computed<MemoryItem[]>(() => staticMemoryItems.value)
 
 const sidebarStyle = computed(() => ({
   '--sidebar-hue': `${sidebarHue.value}`,
@@ -159,26 +128,22 @@ ${situation.value}
 `)
 
 watch(
-  [activePage, isCollapsed, sidebarHue, sidebarBrightness, localMemoryItems, hiddenStaticIds, topZIndex],
+  [activePage, isCollapsed, sidebarHue, sidebarBrightness],
   () => {
     const state: StoredState = {
       activePage: activePage.value,
       isCollapsed: isCollapsed.value,
       sidebarHue: sidebarHue.value,
       sidebarBrightness: sidebarBrightness.value,
-      localMemoryItems: serializeLocalMemoryItems(false),
-      hiddenStaticIds: hiddenStaticIds.value,
-      topZIndex: topZIndex.value,
     }
 
-    saveStoredState(state)
+    localStorage.setItem(storageKey, JSON.stringify(state))
   },
   { deep: true },
 )
 
 onMounted(() => {
   void loadStaticMemories()
-  void restoreStoredLocalImages()
 })
 
 function loadStoredState(): StoredState | null {
@@ -242,34 +207,15 @@ function handlePhotoChange(event: Event) {
   reader.readAsDataURL(file)
 }
 
-async function saveMemory() {
-  const id = Date.now()
-  const imageDataKey = selectedPhotoPreview.value ? `photo-${id}` : undefined
-  const placement = [
-    { x: 360, y: 36, rotate: '-2deg', color: '#e3ffd1', zIndex: topZIndex.value + 1, scale: 1 },
-    { x: 580, y: 330, rotate: '4deg', color: '#fff0c4', zIndex: topZIndex.value + 1, scale: 1 },
-    { x: 48, y: 520, rotate: '-5deg', color: '#d9e7ff', zIndex: topZIndex.value + 1, scale: 1 },
-  ][memoryItems.value.length % 3]
-
-  if (imageDataKey) {
-    await saveImageData(imageDataKey, selectedPhotoPreview.value)
-  }
-
-  localMemoryItems.value = [
-    {
-      id,
-      title: title.value,
-      photoName: selectedPhotoName.value,
-      markdownName: markdownFileName.value,
-      situation: situation.value,
-      imageUrl: selectedPhotoPreview.value || imageFallback,
-      imageDataKey,
-      githubPath: `memories/2026/${markdownFileName.value}`,
-      note: placement,
-    },
-    ...localMemoryItems.value,
-  ]
-  activePage.value = 'gallery'
+function saveMemory() {
+  gitPublishMessage.value = [
+    '這個網站不能直接寫入 GitHub。請在專案電腦執行：',
+    `npm run publish:memory -- --photo ./照片檔案 --title ${shellQuote(title.value)} --situation ${shellQuote(situation.value)}`,
+    'npm run build',
+    'git add public',
+    `git commit -m ${shellQuote(`Add ${title.value} memory`)}`,
+    'git push origin main',
+  ].join('\n')
 }
 
 function downloadMarkdown() {
@@ -283,230 +229,13 @@ function downloadMarkdown() {
   URL.revokeObjectURL(url)
 }
 
-function bringToFront(item: MemoryItem) {
-  topZIndex.value += 1
-  item.note.zIndex = topZIndex.value
+function showGitPublishHelp() {
+  activePage.value = 'upload'
+  saveMemory()
 }
 
-function resizeMemory(item: MemoryItem, amount: number) {
-  bringToFront(item)
-  item.note.scale = Math.min(Math.max(item.note.scale + amount, 0.7), 1.6)
-}
-
-function removeMemory(item: MemoryItem) {
-  localMemoryItems.value = localMemoryItems.value.filter((memory) => memory.id !== item.id)
-
-  if (item.imageDataKey) {
-    void deleteImageData(item.imageDataKey)
-  }
-
-  if (staticMemoryItems.value.some((memory) => memory.id === item.id)) {
-    hiddenStaticIds.value = [...new Set([...hiddenStaticIds.value, item.id])]
-  }
-}
-
-function startDrag(event: PointerEvent, item: MemoryItem) {
-  const board = stickyBoardRef.value
-  const target = event.currentTarget as HTMLElement
-
-  if (!board) return
-
-  bringToFront(item)
-  target.setPointerCapture(event.pointerId)
-  activeDrag.value = {
-    id: item.id,
-    offsetX: event.clientX - item.note.x,
-    offsetY: event.clientY - item.note.y,
-  }
-}
-
-function moveDrag(event: PointerEvent) {
-  const drag = activeDrag.value
-
-  if (!drag) return
-
-  const item =
-    localMemoryItems.value.find((memory) => memory.id === drag.id) ??
-    staticMemoryItems.value.find((memory) => memory.id === drag.id)
-
-  if (!item) return
-
-  moveMemoryWithinBoard(event, item, drag.offsetX, drag.offsetY)
-}
-
-function moveMemoryWithinBoard(
-  event: PointerEvent,
-  item: Pick<MemoryItem, 'note'>,
-  offsetX: number,
-  offsetY: number,
-) {
-  const board = stickyBoardRef.value
-
-  if (!board) return
-
-  const boardRect = board.getBoundingClientRect()
-  const cardWidth = 330 * item.note.scale
-  const cardHeight = 168 * item.note.scale
-  const nextX = event.clientX - offsetX
-  const nextY = event.clientY - offsetY
-
-  item.note.x = Math.min(Math.max(nextX, 8), boardRect.width - cardWidth)
-  item.note.y = Math.min(Math.max(nextY, 8), boardRect.height - cardHeight)
-}
-
-function stopDrag() {
-  activeDrag.value = null
-}
-
-function resetStoredMemories() {
-  void clearImageData()
-  localStorage.removeItem(storageKey)
-  localMemoryItems.value = []
-  hiddenStaticIds.value = []
-  staticMemoryItems.value = toMemoryItems(sampleItems)
-  topZIndex.value = 10
-}
-
-function serializeLocalMemoryItems(stripAllDataUrls: boolean) {
-  return localMemoryItems.value.map((item) => {
-    if (!isDataUrl(item.imageUrl)) return item
-
-    if (stripAllDataUrls || item.imageDataKey) {
-      return {
-        ...item,
-        imageUrl: '',
-      }
-    }
-
-    return item
-  })
-}
-
-function saveStoredState(state: StoredState) {
-  try {
-    localStorage.setItem(storageKey, JSON.stringify(state))
-  } catch {
-    localStorage.setItem(
-      storageKey,
-      JSON.stringify({
-        ...state,
-        localMemoryItems: serializeLocalMemoryItems(true),
-      }),
-    )
-  }
-}
-
-async function restoreStoredLocalImages() {
-  let hasUpdates = false
-
-  const restoredItems = await Promise.all(
-    localMemoryItems.value.map(async (item) => {
-      if (item.imageDataKey) {
-        const storedImage = await loadImageData(item.imageDataKey)
-
-        if (storedImage) {
-          return {
-            ...item,
-            imageUrl: storedImage,
-          }
-        }
-
-        if (!item.imageUrl) {
-          return {
-            ...item,
-            imageUrl: imageFallback,
-          }
-        }
-
-        return item
-      }
-
-      if (!isDataUrl(item.imageUrl)) return item
-
-      const imageDataKey = `photo-${item.id}`
-      await saveImageData(imageDataKey, item.imageUrl)
-      hasUpdates = true
-
-      return {
-        ...item,
-        imageDataKey,
-      }
-    }),
-  )
-
-  if (hasUpdates || restoredItems.some((item, index) => item.imageUrl !== localMemoryItems.value[index]?.imageUrl)) {
-    localMemoryItems.value = restoredItems
-  }
-}
-
-function isDataUrl(value: string) {
-  return value.startsWith('data:')
-}
-
-function openImageDb() {
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(imageDbName, 1)
-
-    request.addEventListener('upgradeneeded', () => {
-      request.result.createObjectStore(imageStoreName)
-    })
-    request.addEventListener('success', () => resolve(request.result))
-    request.addEventListener('error', () => reject(request.error))
-  })
-}
-
-async function withImageStore<T>(
-  mode: IDBTransactionMode,
-  action: (store: IDBObjectStore) => IDBRequest<T>,
-) {
-  const db = await openImageDb()
-
-  return new Promise<T>((resolve, reject) => {
-    const transaction = db.transaction(imageStoreName, mode)
-    const request = action(transaction.objectStore(imageStoreName))
-
-    request.addEventListener('success', () => resolve(request.result))
-    request.addEventListener('error', () => reject(request.error))
-    transaction.addEventListener('complete', () => db.close())
-    transaction.addEventListener('error', () => {
-      db.close()
-      reject(transaction.error)
-    })
-  })
-}
-
-async function saveImageData(key: string, imageData: string) {
-  try {
-    await withImageStore('readwrite', (store) => store.put(imageData, key))
-  } catch {
-    // The gallery still works in the current session if browser storage is unavailable.
-  }
-}
-
-async function loadImageData(key: string) {
-  try {
-    const imageData = await withImageStore<string | undefined>('readonly', (store) => store.get(key))
-
-    return typeof imageData === 'string' ? imageData : ''
-  } catch {
-    return ''
-  }
-}
-
-async function deleteImageData(key: string) {
-  try {
-    await withImageStore('readwrite', (store) => store.delete(key))
-  } catch {
-    // Best-effort cleanup only.
-  }
-}
-
-async function clearImageData() {
-  try {
-    await withImageStore('readwrite', (store) => store.clear())
-  } catch {
-    // Best-effort cleanup only.
-  }
+function shellQuote(value: string) {
+  return `'${value.replace(/'/g, "'\\''")}'`
 }
 </script>
 
@@ -621,7 +350,7 @@ async function clearImageData() {
               情境說明
               <textarea v-model="situation" rows="7" aria-label="照片情境說明"></textarea>
             </label>
-            <button class="primary-button" type="submit">加入本機預覽</button>
+            <button class="primary-button" type="submit">存入 GIT</button>
           </form>
         </div>
 
@@ -636,6 +365,13 @@ async function clearImageData() {
           </div>
           <pre>{{ markdownPreview }}</pre>
         </div>
+        <div v-if="gitPublishMessage" class="github-panel github-panel--single" aria-label="存入 Git 指令">
+          <div>
+            <span class="section-label">下一步</span>
+            <h2>在專案電腦執行這些指令</h2>
+          </div>
+          <pre>{{ gitPublishMessage }}</pre>
+        </div>
       </section>
 
       <section v-else class="gallery-page" aria-label="展示照片">
@@ -646,8 +382,8 @@ async function clearImageData() {
           <button class="primary-button" type="button" @click="activePage = 'upload'">
             新增照片
           </button>
-          <button class="secondary-button" type="button" @click="resetStoredMemories">
-            重設展示
+          <button class="secondary-button" type="button" @click="showGitPublishHelp">
+            存入 GIT
           </button>
         </div>
 
@@ -656,7 +392,6 @@ async function clearImageData() {
             v-for="item in memoryItems"
             :key="item.id"
             class="sticky-memory"
-            :class="{ 'is-dragging': activeDrag?.id === item.id }"
             :style="{
               top: `${item.note.y}px`,
               left: `${item.note.x}px`,
@@ -665,45 +400,12 @@ async function clearImageData() {
               '--note-color': item.note.color,
               zIndex: item.note.zIndex,
             }"
-            @pointerdown="startDrag($event, item)"
-            @pointermove="moveDrag"
-            @pointerup="stopDrag"
-            @pointercancel="stopDrag"
           >
             <div
               class="sticky-memory__photo"
               :style="photoStyle(item)"
             ></div>
             <div class="sticky-memory__note">
-              <div class="sticky-memory__tools" aria-label="便利貼尺寸控制">
-                <button
-                  type="button"
-                  aria-label="縮小便利貼"
-                  title="縮小"
-                  @pointerdown.stop
-                  @click.stop="resizeMemory(item, -0.1)"
-                >
-                  -
-                </button>
-                <button
-                  type="button"
-                  aria-label="放大便利貼"
-                  title="放大"
-                  @pointerdown.stop
-                  @click.stop="resizeMemory(item, 0.1)"
-                >
-                  +
-                </button>
-                <button
-                  type="button"
-                  aria-label="移除便利貼"
-                  title="移除"
-                  @pointerdown.stop
-                  @click.stop="removeMemory(item)"
-                >
-                  ×
-                </button>
-              </div>
               <strong>{{ item.title }}</strong>
               <p>{{ item.situation }}</p>
               <span>{{ item.photoName }} ↔ {{ item.markdownName }}</span>
