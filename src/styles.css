@@ -520,6 +520,15 @@ h2 {
   color: #172033;
 }
 
+.sticky-memory__status {
+  width: fit-content;
+  border-radius: 6px;
+  padding: 3px 6px;
+  color: #7a4f00;
+  background: rgb(255 255 255 / 0.68);
+  font-weight: 800;
+}
+
 .sticky-memory__note p {
   display: -webkit-box;
   overflow: hidden;

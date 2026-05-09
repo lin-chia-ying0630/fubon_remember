@@ -18,6 +18,7 @@ type MemoryItem = {
   situation: string
   imageUrl: string
   githubPath: string
+  isDraft?: boolean
   note: {
     x: number
     y: number
@@ -40,6 +41,7 @@ type StaticMemoryItem = Omit<MemoryItem, 'imageUrl'> & {
 }
 
 const storageKey = 'fubon-remember-state'
+const imageFallback = 'linear-gradient(135deg, #2f5d7c 0%, #9bc4dd 46%, #f5ddb0 100%)'
 
 const navItems: NavItem[] = [
   { id: 'upload', label: '上傳', meta: '照片', icon: '↑' },
@@ -89,6 +91,7 @@ const selectedPhotoName = ref('memory-photo.jpg')
 const selectedPhotoPreview = ref('')
 const gitPublishMessage = ref('')
 const staticMemoryItems = ref<MemoryItem[]>(toMemoryItems(sampleItems))
+const draftMemoryItems = ref<MemoryItem[]>([])
 const stickyBoardRef = ref<HTMLElement | null>(null)
 
 const storedState = loadStoredState()
@@ -104,7 +107,10 @@ const activeNavItem = computed(
   () => navItems.find((item) => item.id === activePage.value) ?? navItems[0],
 )
 
-const memoryItems = computed<MemoryItem[]>(() => staticMemoryItems.value)
+const memoryItems = computed<MemoryItem[]>(() => [
+  ...draftMemoryItems.value,
+  ...staticMemoryItems.value,
+])
 
 const sidebarStyle = computed(() => ({
   '--sidebar-hue': `${sidebarHue.value}`,
@@ -207,10 +213,36 @@ function handlePhotoChange(event: Event) {
   reader.readAsDataURL(file)
 }
 
-function saveMemory() {
+function addDraftToGallery() {
+  const id = Date.now()
+  const placement = [
+    { x: 360, y: 36, rotate: '-2deg', color: '#e3ffd1', zIndex: staticMemoryItems.value.length + 1, scale: 1 },
+    { x: 580, y: 330, rotate: '4deg', color: '#fff0c4', zIndex: staticMemoryItems.value.length + 2, scale: 1 },
+    { x: 48, y: 520, rotate: '-5deg', color: '#d9e7ff', zIndex: staticMemoryItems.value.length + 3, scale: 1 },
+  ][draftMemoryItems.value.length % 3]
+
+  draftMemoryItems.value = [
+    {
+      id,
+      title: title.value,
+      photoName: selectedPhotoName.value,
+      markdownName: markdownFileName.value,
+      situation: situation.value,
+      imageUrl: selectedPhotoPreview.value || imageFallback,
+      githubPath: `memories/2026/${markdownFileName.value}`,
+      isDraft: true,
+      note: placement,
+    },
+    ...draftMemoryItems.value,
+  ]
+  gitPublishMessage.value = ''
+  activePage.value = 'gallery'
+}
+
+function prepareGitPublish() {
   gitPublishMessage.value = [
     '這個網站不能直接寫入 GitHub。請在專案電腦執行：',
-    `npm run publish:memory -- --photo ./照片檔案 --title ${shellQuote(title.value)} --situation ${shellQuote(situation.value)}`,
+    `npm run publish:memory -- --photo ./${selectedPhotoName.value} --title ${shellQuote(title.value)} --situation ${shellQuote(situation.value)}`,
     'npm run build',
     'git add public',
     `git commit -m ${shellQuote(`Add ${title.value} memory`)}`,
@@ -230,8 +262,7 @@ function downloadMarkdown() {
 }
 
 function showGitPublishHelp() {
-  activePage.value = 'upload'
-  saveMemory()
+  prepareGitPublish()
 }
 
 function shellQuote(value: string) {
@@ -337,7 +368,7 @@ function shellQuote(value: string) {
             <input id="photo-upload" type="file" accept="image/*" @change="handlePhotoChange" />
           </div>
 
-          <form class="upload-form" @submit.prevent="saveMemory">
+          <form class="upload-form" @submit.prevent="addDraftToGallery">
             <label>
               照片標題
               <input v-model="title" type="text" aria-label="照片標題" />
@@ -350,7 +381,7 @@ function shellQuote(value: string) {
               情境說明
               <textarea v-model="situation" rows="7" aria-label="照片情境說明"></textarea>
             </label>
-            <button class="primary-button" type="submit">存入 GIT</button>
+            <button class="primary-button" type="submit">加入展示</button>
           </form>
         </div>
 
@@ -365,13 +396,6 @@ function shellQuote(value: string) {
           </div>
           <pre>{{ markdownPreview }}</pre>
         </div>
-        <div v-if="gitPublishMessage" class="github-panel github-panel--single" aria-label="存入 Git 指令">
-          <div>
-            <span class="section-label">下一步</span>
-            <h2>在專案電腦執行這些指令</h2>
-          </div>
-          <pre>{{ gitPublishMessage }}</pre>
-        </div>
       </section>
 
       <section v-else class="gallery-page" aria-label="展示照片">
@@ -385,6 +409,14 @@ function shellQuote(value: string) {
           <button class="secondary-button" type="button" @click="showGitPublishHelp">
             存入 GIT
           </button>
+        </div>
+
+        <div v-if="gitPublishMessage" class="github-panel github-panel--single" aria-label="存入 Git 指令">
+          <div>
+            <span class="section-label">下一步</span>
+            <h2>在專案電腦執行這些指令</h2>
+          </div>
+          <pre>{{ gitPublishMessage }}</pre>
         </div>
 
         <div ref="stickyBoardRef" class="sticky-board">
@@ -406,6 +438,7 @@ function shellQuote(value: string) {
               :style="photoStyle(item)"
             ></div>
             <div class="sticky-memory__note">
+              <small v-if="item.isDraft" class="sticky-memory__status">尚未存入 Git</small>
               <strong>{{ item.title }}</strong>
               <p>{{ item.situation }}</p>
               <span>{{ item.photoName }} ↔ {{ item.markdownName }}</span>
